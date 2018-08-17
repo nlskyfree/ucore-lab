@@ -188,6 +188,7 @@ nr_free_pages(void) {
 /* pmm_init - initialize the physical memory management */
 static void
 page_init(void) {
+	// 得到boot时探测的内存分布情况
     struct e820map *memmap = (struct e820map *)(0x8000 + KERNBASE);
     uint64_t maxpa = 0;
 
@@ -197,6 +198,7 @@ page_init(void) {
         uint64_t begin = memmap->map[i].addr, end = begin + memmap->map[i].size;
         cprintf("  memory: %08llx, [%08llx, %08llx], type = %d.\n",
                 memmap->map[i].size, begin, end - 1, memmap->map[i].type);
+        // type为1即E820_ARM，代表可以使用的内存，2代表可以供其它外设使用的内存
         if (memmap->map[i].type == E820_ARM) {
             if (maxpa < end && begin < KMEMSIZE) {
                 maxpa = end;
@@ -206,16 +208,18 @@ page_init(void) {
     if (maxpa > KMEMSIZE) {
         maxpa = KMEMSIZE;
     }
-
+    // kernel.ld中定义，为内核的结束地址
     extern char end[];
-
+    // 计算出总共的页数
     npage = maxpa / PGSIZE;
     pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
-
+    // 从pages开始，将所有页帧的flag中第0位置1
+    // 表示此页为内核使用，不能被alloc
     for (i = 0; i < npage; i ++) {
         SetPageReserved(pages + i);
     }
-
+    //找到free页的开始地址， 并初始化所有free页的信息
+    //(free页就是除了kernel和页信息外的可用空间，初始化的过程会reset flag中的reserved位)
     uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
 
     for (i = 0; i < memmap->nr_map; i ++) {

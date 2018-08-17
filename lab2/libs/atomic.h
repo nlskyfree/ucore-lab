@@ -15,6 +15,7 @@ static inline bool test_bit(int nr, volatile void *addr) __attribute__((always_i
  *
  * Note that @nr may be almost arbitrarily large; this function is not
  * restricted to acting on a single-word quantity.
+ * 将内存中addr第nr位置1
  * */
 static inline void
 set_bit(int nr, volatile void *addr) {
