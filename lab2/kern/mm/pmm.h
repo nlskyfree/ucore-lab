@@ -86,9 +86,11 @@ page2pa(struct Page *page) {
 
 static inline struct Page *
 pa2page(uintptr_t pa) {
+	// PPN计算出来是第几页
     if (PPN(pa) >= npage) {
         panic("pa2page called with invalid pa");
     }
+    // 由实际要访问的地址转换成对应描述数据结构的地址
     return &pages[PPN(pa)];
 }
 

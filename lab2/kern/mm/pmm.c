@@ -136,8 +136,10 @@ gdt_init(void) {
 //init_pmm_manager - initialize a pmm_manager instance
 static void
 init_pmm_manager(void) {
-    pmm_manager = &default_pmm_manager;
+    // 使用默认的物理内存管理器
+	pmm_manager = &default_pmm_manager;
     cprintf("memory management: %s\n", pmm_manager->name);
+    // 调用初始化方法，本质是初始化双向链表
     pmm_manager->init();
 }
 
@@ -201,6 +203,7 @@ page_init(void) {
         // type为1即E820_ARM，代表可以使用的内存，2代表可以供其它外设使用的内存
         if (memmap->map[i].type == E820_ARM) {
             if (maxpa < end && begin < KMEMSIZE) {
+            	// 取到可用内存的最末地址
                 maxpa = end;
             }
         }
@@ -210,18 +213,22 @@ page_init(void) {
     }
     // kernel.ld中定义，为内核的结束地址
     extern char end[];
-    // 计算出总共的页数
+    // maxpa为可用内存的最大地址，计算出总共的页数，向下取整
     npage = maxpa / PGSIZE;
+    // pages为内核地址向上按页取整的地址，pages到maxpa即为可被分配的空闲内存
     pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
     // 从pages开始，将所有页帧的flag中第0位置1
     // 表示此页为内核使用，不能被alloc
+	// pages为Page类型的指针，这里将pages
     for (i = 0; i < npage; i ++) {
         SetPageReserved(pages + i);
     }
     //找到free页的开始地址， 并初始化所有free页的信息
     //(free页就是除了kernel和页信息外的可用空间，初始化的过程会reset flag中的reserved位)
+    //freemem为空闲内存的起始地址
     uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
 
+    // 对探测到的可用内存，判断如果在freemem与KMEMSIZE之间，则进行初始化
     for (i = 0; i < memmap->nr_map; i ++) {
         uint64_t begin = memmap->map[i].addr, end = begin + memmap->map[i].size;
         if (memmap->map[i].type == E820_ARM) {

@@ -58,7 +58,7 @@ free_area_t free_area;
 
 #define free_list (free_area.free_list)
 #define nr_free (free_area.nr_free)
-
+// 初始化双向链表， free个数初始化为0
 static void
 default_init(void) {
     list_init(&free_list);
@@ -70,13 +70,19 @@ default_init_memmap(struct Page *base, size_t n) {
     assert(n > 0);
     struct Page *p = base;
     for (; p != base + n; p ++) {
+    	// 校验当前页时候是reserve的
         assert(PageReserved(p));
+        // 清空标志位，设置free块个数为0(存储在头上）
         p->flags = p->property = 0;
         set_page_ref(p, 0);
     }
+    // Page.property标识free块的个数，即多少个4K
     base->property = n;
+    // page头标识
     SetPageProperty(base);
+    // 链表长度+n
     nr_free += n;
+    // 将base插入双向链表，base标识了此块内存的大小（块会分成多个页）
     list_add(&free_list, &(base->page_link));
 }
 
@@ -90,19 +96,26 @@ default_alloc_pages(size_t n) {
     list_entry_t *le = &free_list;
     while ((le = list_next(le)) != &free_list) {
         struct Page *p = le2page(le, page_link);
+        // 找到第一块（first fit）大于所需内存的区域
         if (p->property >= n) {
             page = p;
             break;
         }
     }
     if (page != NULL) {
+    	// 先将此块内存移出链表
         list_del(&(page->page_link));
+        // 再次校验
         if (page->property > n) {
+        	// p移到第n个page处
+            // 获取其中n个page，将多余的内存再次加入链表
             struct Page *p = page + n;
             p->property = page->property - n;
             list_add(&free_list, &(p->page_link));
-    }
+        }
+        // 链表page数目-n
         nr_free -= n;
+        // 标志此块内存已被分配标志位
         ClearPageProperty(page);
     }
     return page;
@@ -113,16 +126,20 @@ default_free_pages(struct Page *base, size_t n) {
     assert(n > 0);
     struct Page *p = base;
     for (; p != base + n; p ++) {
+    	// 校验这块内存没有被内核使用并且已经被分配
         assert(!PageReserved(p) && !PageProperty(p));
         p->flags = 0;
         set_page_ref(p, 0);
     }
     base->property = n;
+    // 标志base为空闲内存头
     SetPageProperty(base);
     list_entry_t *le = list_next(&free_list);
+    // 遍历链表判断是否需要合并相邻空闲块
     while (le != &free_list) {
         p = le2page(le, page_link);
         le = list_next(le);
+        // 如果释放的内存，后面或前面紧接着其它空闲内存，则合并
         if (base + base->property == p) {
             base->property += p->property;
             ClearPageProperty(p);
@@ -135,12 +152,14 @@ default_free_pages(struct Page *base, size_t n) {
             list_del(&(p->page_link));
         }
     }
+    // 合并完成后，加入双向循环链表
     nr_free += n;
     list_add(&free_list, &(base->page_link));
 }
 
 static size_t
 default_nr_free_pages(void) {
+	// 返回空闲的page数目
     return nr_free;
 }
 
@@ -260,6 +279,7 @@ default_check(void) {
     assert(total == 0);
 }
 
+//物理内存管理器default实现，除了name字段，其它皆为函数指针，初始化时调用
 const struct pmm_manager default_pmm_manager = {
     .name = "default_pmm_manager",
     .init = default_init,
