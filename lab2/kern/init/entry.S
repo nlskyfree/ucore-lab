@@ -37,9 +37,9 @@ bootstack:
     .space KSTACKSIZE
     .globl bootstacktop
 bootstacktop:
-
+# 从这里开始virt addr - 0xC0000000 = linear addr = phy addr
 .align 4
-__gdt:
+__gdt:# 链接地址为虚地址0xC0100000，因此必须-0xC0000000才能找到对应物理地址（代码段起始地址为0x00100000）
     SEG_NULL
     SEG_ASM(STA_X | STA_R, - KERNBASE, 0xFFFFFFFF)      # code segment
     SEG_ASM(STA_W, - KERNBASE, 0xFFFFFFFF)              # data segment

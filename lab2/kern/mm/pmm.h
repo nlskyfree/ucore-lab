@@ -50,6 +50,7 @@ void print_pgdir(void);
  * where the machine's maximum 256MB of physical memory is mapped and returns the
  * corresponding physical address.  It panics if you pass it a non-kernel virtual address.
  * */
+// 虚拟地址转物理地址
 #define PADDR(kva) ({                                                   \
             uintptr_t __m_kva = (uintptr_t)(kva);                       \
             if (__m_kva < KERNBASE) {                                   \
@@ -62,6 +63,7 @@ void print_pgdir(void);
  * KADDR - takes a physical address and returns the corresponding kernel virtual
  * address. It panics if you pass an invalid physical address.
  * */
+// 物理地址转虚拟地址
 #define KADDR(pa) ({                                                    \
             uintptr_t __m_pa = (pa);                                    \
             size_t __m_ppn = PPN(__m_pa);                               \
@@ -76,26 +78,31 @@ extern size_t npage;
 
 static inline ppn_t
 page2ppn(struct Page *page) {
+	// 减去基指针判断是第几个page
     return page - pages;
 }
 
+// page to phycial address
 static inline uintptr_t
 page2pa(struct Page *page) {
+	// page数乘4096得到物理地址
     return page2ppn(page) << PGSHIFT;
 }
 
+// phycial address to page
 static inline struct Page *
 pa2page(uintptr_t pa) {
-	// PPN计算出来是第几页
+	// PPN实现为右移12位，等于除以页大小4096
     if (PPN(pa) >= npage) {
         panic("pa2page called with invalid pa");
     }
-    // 由实际要访问的地址转换成对应描述数据结构的地址
+    // 由实际要访问的物理地址转换成对应Page数据结构的地址
     return &pages[PPN(pa)];
 }
 
 static inline void *
 page2kva(struct Page *page) {
+	// page2pa得到物理地址，KADDR转虚拟地址
     return KADDR(page2pa(page));
 }
 

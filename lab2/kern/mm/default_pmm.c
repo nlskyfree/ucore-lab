@@ -69,21 +69,23 @@ static void
 default_init_memmap(struct Page *base, size_t n) {
     assert(n > 0);
     struct Page *p = base;
+    // 初始化base开始的n个Page
     for (; p != base + n; p ++) {
     	// 校验当前页时候是reserve的
         assert(PageReserved(p));
         // 清空标志位，设置free块个数为0(存储在头上）
         p->flags = p->property = 0;
+        // 标志此页是空闲的
+        SetPageProperty(p);
+        // ref代表有多少使用者
         set_page_ref(p, 0);
+        // 将当前页插入双向链表
+		list_add(&free_list, &(p->page_link));
     }
-    // Page.property标识free块的个数，即多少个4K
+    // Page.property标识free块的个数
     base->property = n;
-    // page头标识
-    SetPageProperty(base);
     // 链表长度+n
     nr_free += n;
-    // 将base插入双向链表，base标识了此块内存的大小（块会分成多个页）
-    list_add(&free_list, &(base->page_link));
 }
 
 static struct Page *

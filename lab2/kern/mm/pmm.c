@@ -191,6 +191,7 @@ nr_free_pages(void) {
 static void
 page_init(void) {
 	// 得到boot时探测的内存分布情况
+	// 注意内存探测发生时，段表是对等映射，因此实际得到的是物理内存地址
     struct e820map *memmap = (struct e820map *)(0x8000 + KERNBASE);
     uint64_t maxpa = 0;
 
@@ -203,7 +204,7 @@ page_init(void) {
         // type为1即E820_ARM，代表可以使用的内存，2代表可以供其它外设使用的内存
         if (memmap->map[i].type == E820_ARM) {
             if (maxpa < end && begin < KMEMSIZE) {
-            	// 取到可用内存的最末地址
+            	// 取到可用物理内存的最末地址
                 maxpa = end;
             }
         }
@@ -215,17 +216,17 @@ page_init(void) {
     extern char end[];
     // maxpa为可用内存的最大地址，计算出总共的页数，向下取整
     npage = maxpa / PGSIZE;
-    // pages为内核地址向上按页取整的地址，pages到maxpa即为可被分配的空闲内存
+    // pages为内核结束地址向上按页取整的地址，从此开始存储npage个Page结构管理内存
     pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
-    // 从pages开始，将所有页帧的flag中第0位置1
-    // 表示此页为内核使用，不能被alloc
-	// pages为Page类型的指针，这里将pages
+	// 因为整个物理内存有npage个物理页帧，这里需要npage个strcut Page结构来管理物理页帧
+    // 从pages开始，将所有页帧的flag中第0位置1，表示此页为内核使用，不能被alloc
     for (i = 0; i < npage; i ++) {
         SetPageReserved(pages + i);
     }
     //找到free页的开始地址， 并初始化所有free页的信息
     //(free页就是除了kernel和页信息外的可用空间，初始化的过程会reset flag中的reserved位)
-    //freemem为空闲内存的起始地址
+    //freemem为空闲内存的起始物理地址
+    //因为下面要跟物理地址比较，因此需要转换成物理地址比较
     uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
 
     // 对探测到的可用内存，判断如果在freemem与KMEMSIZE之间，则进行初始化
@@ -241,6 +242,7 @@ page_init(void) {
             if (begin < end) {
                 begin = ROUNDUP(begin, PGSIZE);
                 end = ROUNDDOWN(end, PGSIZE);
+                // 说明当前内存块有至少大于1页数据处于空闲内存中，因此加入空闲链表
                 if (begin < end) {
                     init_memmap(pa2page(begin), (end - begin) / PGSIZE);
                 }
@@ -307,11 +309,16 @@ pmm_init(void) {
     page_init();
 
     //use pmm->check to verify the correctness of the alloc/free function in a pmm
+    //会对分配内存的各个操作、内部数据的一致性进行校验，不通过会报错
     check_alloc_page();
 
     // create boot_pgdir, an initial page directory(Page Directory Table, PDT)
+    // 分配一个物理页帧作为页目录，返回的是虚拟地址
+    // 线性地址高10位为页目录索引，中间10位为页表索引，因此各1024项
+    // 一个页目录表项、页表项4个字节，1页正好支持1024个页目录表项与1024个页表项
     boot_pgdir = boot_alloc_page();
     memset(boot_pgdir, 0, PGSIZE);
+    // 页目录物理地址入口
     boot_cr3 = PADDR(boot_pgdir);
 
     check_pgdir();
@@ -339,7 +346,9 @@ pmm_init(void) {
     gdt_init();
 
     //disable the map of virtual_addr 0~4M
+    //取消临时映射关系
     boot_pgdir[0] = 0;
+    //此时virt addr = linear addr = phy addr + 0xC0000000
 
     //now the basic virtual memory map(see memalyout.h) is established.
     //check the correctness of the basic virtual memory map.

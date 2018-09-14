@@ -104,6 +104,7 @@ bootmain(void) {
 
     // call the entry point from the ELF header
     // note: does not return
+    // 这里的值为0x100000为内核代码段起始物理地址
     ((void (*)(void))(ELFHDR->e_entry & 0xFFFFFF))();
 
 bad:
