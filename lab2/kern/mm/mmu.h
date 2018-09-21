@@ -213,6 +213,7 @@ struct taskstate {
 #define PGOFF(la) (((uintptr_t)(la)) & 0xFFF)
 
 // construct linear address from indexes and offset
+// d为高10位，t为中间10位，o为最后12位，拼装成32位线性地址
 #define PGADDR(d, t, o) ((uintptr_t)((d) << PDXSHIFT | (t) << PTXSHIFT | (o)))
 
 // address in page table or page directory entry

@@ -55,6 +55,7 @@
 /* All physical memory mapped at this address */
 #define KERNBASE            0xC0000000
 #define KMEMSIZE            0x38000000                  // the maximum amount of physical memory
+// 最大内核虚地址为0xF8000000
 #define KERNTOP             (KERNBASE + KMEMSIZE)
 
 /* *

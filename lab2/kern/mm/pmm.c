@@ -57,7 +57,9 @@ const struct pmm_manager *pmm_manager;
  * always available at virtual address PGADDR(PDX(VPT), PDX(VPT), 0), to which
  * vpd is set bellow.
  * */
+// 页目录表中第一个目录表项指向的页表的起始虚地址
 pte_t * const vpt = (pte_t *)VPT;
+// 页目录表的起始虚拟地址
 pde_t * const vpd = (pde_t *)PGADDR(PDX(VPT), PDX(VPT), 0);
 
 /* *
@@ -267,16 +269,20 @@ enable_paging(void) {
 //  la:   linear address of this memory need to map (after x86 segment map)
 //  size: memory size
 //  pa:   physical address of this memory
-//  perm: permission of this memory  
+//  perm: permission of this memory
+// 建立物理内存与线性地址空间的映射关系
 static void
 boot_map_segment(pde_t *pgdir, uintptr_t la, size_t size, uintptr_t pa, uint32_t perm) {
     assert(PGOFF(la) == PGOFF(pa));
+    // 计算线性地址空间可以划分多少页，取上整
     size_t n = ROUNDUP(size + PGOFF(la), PGSIZE) / PGSIZE;
+    // 起始地址也按4K取整，取下整
     la = ROUNDDOWN(la, PGSIZE);
     pa = ROUNDDOWN(pa, PGSIZE);
     for (; n > 0; n --, la += PGSIZE, pa += PGSIZE) {
         pte_t *ptep = get_pte(pgdir, la, 1);
         assert(ptep != NULL);
+        // 页表项的指指向某个物理内存地址，后面是标志位
         *ptep = pa | PTE_P | perm;
     }
 }
@@ -332,12 +338,13 @@ pmm_init(void) {
     // map all physical memory to linear memory with base linear addr KERNBASE
     //linear_addr KERNBASE~KERNBASE+KMEMSIZE = phy_addr 0~KMEMSIZE
     //But shouldn't use this map until enable_paging() & gdt_init() finished.
+    // 注意这里线性地址0xC0000000与物理地址0对应
     boot_map_segment(boot_pgdir, KERNBASE, KMEMSIZE, 0, PTE_W);
 
     //temporary map: 
     //virtual_addr 3G~3G+4M = linear_addr 0~4M = linear_addr 3G~3G+4M = phy_addr 0~4M     
     boot_pgdir[0] = boot_pgdir[PDX(KERNBASE)];
-
+    // 使能页机制
     enable_paging();
 
     //reload gdt(third time,the last time) to map all physical memory
@@ -400,6 +407,16 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
     }
     return NULL;          // (8) return page table entry
 #endif
+    pde_t *pdep = boot_pgdir[PDX(la)];
+    if(pdep || create) {
+    	Page* page = alloc_page();
+    	uintptr_t pa = page2pa(page);
+    	uintptr_t kva = KADDR(pa);
+    	memset(kva, 0, PGSIZE);
+    	set_page_ref(page,1);
+    	*pdep = pa | PTE_P | PTE_W | PTE_U;
+    }
+    return pdep;
 }
 
 //get_page - get related Page struct for linear address la using PDT pgdir
